@@ -1,0 +1,150 @@
+/* Визуальный уровень: заливки цветом и текстовые подписи. Ничего сверх. */
+
+:root {
+  --фон: #0d1116;
+  --панель: #161c24;
+  --рамка: #2a3542;
+  --текст: #c8d2dc;
+  --тусклый: #6d7c8c;
+  --ровно: #4a7f9e;
+  --тревога: #9e5a4a;
+  --тепло: #9e874a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--фон);
+  color: var(--текст);
+  font: 13px/1.45 ui-monospace, monospace;
+}
+
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+section {
+  background: var(--панель);
+  border: 1px solid var(--рамка);
+  padding: 8px 10px;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--тусклый);
+}
+
+button {
+  background: var(--рамка);
+  color: var(--текст);
+  border: 1px solid var(--рамка);
+  padding: 4px 8px;
+  margin: 2px 2px 2px 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--ровно);
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+input,
+textarea,
+select {
+  background: var(--фон);
+  color: var(--текст);
+  border: 1px solid var(--рамка);
+  font: inherit;
+  padding: 3px 5px;
+  width: 100%;
+}
+
+textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.бар {
+  height: 12px;
+  background: var(--фон);
+  border: 1px solid var(--рамка);
+  margin: 2px 0 6px;
+}
+
+.бар > div {
+  height: 100%;
+}
+
+.строка {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.тусклый {
+  color: var(--тусклый);
+}
+
+.сетка {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.квадрант {
+  aspect-ratio: 1;
+  border: 1px solid var(--рамка);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  background: var(--фон);
+}
+
+.квадрант.шторм {
+  background: var(--ровно);
+}
+
+.квадрант.чисто {
+  background: #1e2b22;
+}
+
+.квадрант.вышка {
+  outline: 1px solid var(--тепло);
+}
+
+ul {
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+li {
+  margin-bottom: 2px;
+}
+
+.лог {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.финал {
+  grid-column: 1 / -1;
+  border-color: var(--тревога);
+}
