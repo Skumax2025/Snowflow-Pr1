@@ -32,6 +32,7 @@ function makeDepot(seed = 11, storm = false) {
     journal,
     rng: createRng(seed),
     external: { stormAt: () => (storm ? 1 : 0), tension: () => 0 },
+    now: () => 0,
     emit: (event, payload) => bus.emit(event, payload),
   };
   const depot = new Structure(
@@ -122,6 +123,7 @@ describe("Пулы событий", () => {
       journal,
       rng: createRng(5),
       external: { stormAt: () => 0, tension: () => 0 },
+      now: () => 0,
       emit: () => {},
     };
     const relay = new Structure(

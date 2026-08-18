@@ -9,6 +9,7 @@
  */
 
 import type { SnowflowConfig } from "../config/types.js";
+import { Broadcast } from "./broadcast.js";
 import { EventBus } from "./bus.js";
 import { City } from "./city.js";
 import { Director } from "./director.js";
@@ -34,11 +35,28 @@ export interface World {
   structures: StructureRegistry;
   factions: Map<FactionKind, Faction>;
   director: Director;
+  broadcast: Broadcast;
   quadrants: Quadrant[];
   poolContext: PoolContext;
 }
 
-export function createWorld(cfg: SnowflowConfig, seed = cfg.party.seed): World {
+export interface WorldOptions {
+  /**
+   * Тикает ли Генератор эфира в этой сборке.
+   *
+   * Заметка «Стенд симуляции», п.5: «Генератор эфира в серию пока не
+   * включается… метрику честнее считать после сборки Приёма сигнала».
+   * Приём сигнала собран, поэтому по умолчанию он тикает и в серии; флаг
+   * оставлен, чтобы можно было померить мир без эфира.
+   */
+  withBroadcast?: boolean;
+}
+
+export function createWorld(
+  cfg: SnowflowConfig,
+  seed = cfg.party.seed,
+  options: WorldOptions = {},
+): World {
   const bus = new EventBus();
   const time = new GameTime(
     {
@@ -72,6 +90,7 @@ export function createWorld(cfg: SnowflowConfig, seed = cfg.party.seed): World {
       stormAt: (q) => (weather.isStorm(q) ? 1 : 0),
       tension: () => director?.value ?? 0,
     },
+    now: () => time.totalMinutes,
     emit: (event, payload) => bus.emit(event, payload),
   };
 
@@ -97,7 +116,6 @@ export function createWorld(cfg: SnowflowConfig, seed = cfg.party.seed): World {
     cityQuadrant: () => cfg.party.cityQuadrant,
     structures,
     allQuadrants: quadrants,
-    now: () => time.totalMinutes,
   };
 
   const factions = new Map<FactionKind, Faction>();
@@ -113,12 +131,23 @@ export function createWorld(cfg: SnowflowConfig, seed = cfg.party.seed): World {
     allQuadrants: quadrants,
   });
 
+  const broadcast = new Broadcast(
+    cfg.broadcast,
+    cfg.party,
+    journal,
+    structures,
+    weather,
+    rng.fork("эфир"),
+    bus,
+  );
+
   // Порядок обхода — константа заметки «Игровой цикл», п.3.
   loop.register(weather);
   loop.register(city);
   for (const structure of structures.items) loop.register(structure);
   for (const faction of factions.values()) loop.register(faction);
   loop.register(director);
+  if (options.withBroadcast !== false) loop.register(broadcast);
 
   return {
     cfg,
@@ -132,6 +161,7 @@ export function createWorld(cfg: SnowflowConfig, seed = cfg.party.seed): World {
     structures,
     factions,
     director,
+    broadcast,
     quadrants,
     poolContext,
   };

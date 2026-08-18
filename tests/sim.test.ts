@@ -69,6 +69,35 @@ describe("Стенд симуляции", () => {
     expect(isolated.journalFacts).toBeGreaterThan(0);
   });
 
+  it("метрика эфира собирается: сигналы идут каждый день партии", () => {
+    expect(cfg.sim.includeBroadcast).toBe(true);
+    expect(summary.ether.meanSignalsPerRun).toBeGreaterThan(0);
+    expect(summary.ether.meanSignalsPerDay.length).toBeGreaterThanOrEqual(cfg.sim.partyLengthDays);
+    // Ни одни сутки партии не остаются полностью без единого сигнала.
+    for (const day of summary.ether.meanSignalsPerDay.slice(0, cfg.sim.partyLengthDays)) {
+      expect(day).toBeGreaterThan(0);
+    }
+  });
+
+  it("эфир не вымирает: тишина остаётся малой долей партии", () => {
+    // Ответ на открытый вопрос 22 мастер-концепта. Плотность к финалу падает,
+    // но эфир не умирает: тишина держится в единицах процентов времени.
+    expect(summary.ether.meanSilenceShare).toBeLessThan(0.2);
+    expect(summary.ether.meanLiveSignals).toBeGreaterThan(1);
+  });
+
+  it("включение Генератора эфира не сдвигает исходы мира", () => {
+    // У эфира свой поток ГСЧ, поэтому метрика не меняет то, что она измеряет.
+    const without = runSeries(loadConfig({ sim: { includeBroadcast: false, runs: 20 } }));
+    const with_ = runSeries(loadConfig({ sim: { includeBroadcast: true, runs: 20 } }));
+    const outcomes = (s: typeof without) =>
+      JSON.stringify(s.results.map((r) => [r.outcome, r.cityDeathDay, r.journalFacts]));
+    expect(outcomes(without)).toBe(outcomes(with_));
+    // При выключенном Генераторе эфира метрика честно пуста, а не выдумана.
+    expect(without.ether.meanSignalsPerRun).toBe(0);
+    expect(with_.ether.meanSignalsPerRun).toBeGreaterThan(0);
+  });
+
   it("синтетический поток рапортов выключен по умолчанию и крутит петлю Доверия при включении", () => {
     expect(cfg.sim.syntheticReports.enabled).toBe(false);
     const withReports = runOne(

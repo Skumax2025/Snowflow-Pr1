@@ -14,7 +14,6 @@
 import type { SnowflowConfig } from "../config/types.js";
 import { AnomalyFilter, HttpAnomalyTransport, type AnomalyTransport } from "./anomalyFilter.js";
 import { Bridge } from "./bridge.js";
-import { Broadcast } from "./broadcast.js";
 import { Ending } from "./ending.js";
 import { Generator } from "./generator.js";
 import { Hallucinations } from "./hallucinations.js";
@@ -37,7 +36,6 @@ export interface Game extends World {
   sleep: Sleep;
   meal: Meal;
   bridge: Bridge;
-  broadcast: Broadcast;
   reception: Reception;
   signalCheck: SignalCheck;
   terminal: Terminal;
@@ -58,7 +56,7 @@ export interface GameOptions {
 
 export function createGame(cfg: SnowflowConfig, options: GameOptions = {}): Game {
   const world = createWorld(cfg, options.seed ?? cfg.party.seed);
-  const { bus, time, loop, journal, weather, city, structures, rng } = world;
+  const { bus, time, loop, journal, weather, city, structures, rng, broadcast } = world;
 
   const generator = new Generator(
     cfg.generator,
@@ -81,15 +79,6 @@ export function createGame(cfg: SnowflowConfig, options: GameOptions = {}): Game
     bus,
   );
 
-  const broadcast = new Broadcast(
-    cfg.broadcast,
-    cfg.party,
-    journal,
-    structures,
-    weather,
-    rng.fork("эфир"),
-    bus,
-  );
   const reception = new Reception(
     cfg.reception,
     cfg.party,
@@ -130,8 +119,7 @@ export function createGame(cfg: SnowflowConfig, options: GameOptions = {}): Game
   );
   const ending = new Ending(cfg.ending, journal, city, cfg.party.minutesPerDay, bus);
 
-  // Мир уже зарегистрирован в лупе внутри createWorld; дальше — по порядку.
-  loop.register(broadcast);
+  // Мир, включая Генератор эфира, уже зарегистрирован внутри createWorld.
   loop.register(newspaper);
   loop.register(bridge);
   loop.register(radioman);

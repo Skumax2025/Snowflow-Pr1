@@ -38,6 +38,7 @@ function makeFactions(opts: { place: string; tension?: number }) {
     journal,
     rng: createRng(9),
     external: { stormAt: () => 0, tension: () => opts.tension ?? 0 },
+    now: () => 0,
     emit: (event, payload) => bus.emit(event, payload),
   };
   const structures = new StructureRegistry();
@@ -75,7 +76,6 @@ function makeFactions(opts: { place: string; tension?: number }) {
       cityQuadrant: () => cfg.party.cityQuadrant,
       structures,
       allQuadrants: allQuadrants(cfg.party.gridCols, cfg.party.gridRows),
-      now: () => 0,
     },
     bus,
     0,
@@ -131,6 +131,7 @@ describe("Фракции", () => {
         journal,
         rng: createRng(77),
         external: { stormAt: () => 0, tension: () => tension },
+        now: () => 0,
         emit: (event, payload) => bus.emit(event, payload),
       };
       const faction = new Faction(
@@ -159,6 +160,7 @@ describe("Фракции", () => {
       journal,
       rng: createRng(4),
       external: { stormAt: () => 0, tension: () => 0 },
+      now: () => 0,
       emit: () => {},
     };
     const own = new Faction(
@@ -169,7 +171,6 @@ describe("Фракции", () => {
         cityQuadrant: () => cfg.party.cityQuadrant,
         structures: new StructureRegistry(),
         allQuadrants: allQuadrants(cfg.party.gridCols, cfg.party.gridRows),
-        now: () => 0,
       },
       bus,
       0,

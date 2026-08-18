@@ -71,14 +71,14 @@ export class City extends WorldEntity {
       this.rhetoricSaturation - this.cfg.rhetoric.decayPerMinute * elapsed,
     );
 
-    this.checkDeath(now);
+    this.checkDeath(now.totalMinutes);
   }
 
   // ── Входящие явные события ──────────────────────────────────────────────
 
   private applyVerdict(payload: ReportVerdictPayload): void {
     if (!this.alive) return;
-    const now = this.lastTickMinute;
+    const now = this.ctx.now();
     let trustDelta = 0;
     const processed: Array<{ category: string; factId: FactId | null }> = [];
 
@@ -131,7 +131,7 @@ export class City extends WorldEntity {
 
   private applyAttack(payload: AttackPayload): void {
     if (!this.alive) return;
-    const now = this.lastTickMinute;
+    const now = this.ctx.now();
     const defence = this.stats.defence ?? 0;
     const breached = payload.power > defence;
 
@@ -158,7 +158,7 @@ export class City extends WorldEntity {
       archetypeTag: "агрессивное",
     });
 
-    this.checkDeath({ totalMinutes: now } as Moment);
+    this.checkDeath(now);
   }
 
   private applySupply(delivered: boolean): void {
@@ -171,13 +171,13 @@ export class City extends WorldEntity {
     }
   }
 
-  private checkDeath(now: Moment): void {
+  private checkDeath(atMinute: number): void {
     if (this.deathWritten) return;
     if ((this.stats.population ?? 0) > 0) return;
     this.deathWritten = true;
     this.alive = false;
     this.ctx.journal.write({
-      time: now.totalMinutes ?? this.lastTickMinute,
+      time: atMinute,
       eventType: CITY_DEAD,
       subject: "город",
       place: this.quadrant,

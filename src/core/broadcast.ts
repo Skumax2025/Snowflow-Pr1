@@ -66,6 +66,8 @@ export class Broadcast implements Tickable {
 
   private signals: Signal[] = [];
   private counter = 0;
+  /** Монотонный счёт по видам: список сигналов чистится по TTL, счёт — нет. */
+  private generated = { обычный: 0, сводка: 0 };
   private schedule: Schedule;
   private meteoSchedule: DailySchedule;
   private relaySchedule: DailySchedule;
@@ -283,6 +285,7 @@ export class Broadcast implements Tickable {
   }
 
   private push(signal: Signal): void {
+    this.generated[signal.kind] += 1;
     this.signals.push(signal);
   }
 
@@ -310,5 +313,10 @@ export class Broadcast implements Tickable {
 
   get all(): readonly Signal[] {
     return this.signals;
+  }
+
+  /** Сколько сигналов каждого вида вышло в эфир за партию. Метрика Стенда. */
+  get generatedCount(): { обычный: number; сводка: number } {
+    return { ...this.generated };
   }
 }

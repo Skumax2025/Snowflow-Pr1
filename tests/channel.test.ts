@@ -132,6 +132,7 @@ describe("Парсер", () => {
       journal,
       rng: createRng(1),
       external: { stormAt: () => 0, tension: () => 0 },
+      now: () => 0,
       emit: () => {},
     };
     structures.add(

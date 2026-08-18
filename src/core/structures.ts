@@ -86,7 +86,7 @@ export class Structure extends WorldEntity {
     this.stats.integrity = clamp((this.stats.integrity ?? 0) - payload.power, 0, 100);
     if ((this.stats.integrity ?? 0) <= 0) {
       this.ctx.journal.write({
-        time: this.lastTickMinute,
+        time: this.ctx.now(),
         eventType: "структура_уничтожена",
         subject: this.subject,
         place: this.quadrant,

@@ -346,6 +346,17 @@ export interface SimConfig {
   partyLengthDays: number;
   timeStepMinutes: number;
   isolatedCityMode: boolean;
+  /**
+   * Тикает ли Генератор эфира в серии. Метрика «не вымирает ли эфир» была
+   * отложена в заметке «Стенд симуляции» до сборки Приёма сигнала; он собран.
+   */
+  includeBroadcast: boolean;
+  /**
+   * Сколько минут подряд без единого живого сигнала считается мёртвым эфиром.
+   * Игрок узнаёт об этом единственным способом — попыткой настройки, поэтому
+   * порог осмысленно мерить в стоимостях попытки.
+   */
+  deadEtherWindowMinutes: number;
   syntheticAttacks: {
     chancePerTick: number;
     powerRange: [number, number];

@@ -580,6 +580,8 @@ export const defaultConfig: SnowflowConfig = {
     partyLengthDays: 13,
     timeStepMinutes: 5,
     isolatedCityMode: false,
+    includeBroadcast: true,
+    deadEtherWindowMinutes: 60,
     syntheticAttacks: {
       chancePerTick: 0.05,
       powerRange: [10, 45],

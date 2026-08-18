@@ -20,7 +20,6 @@ export interface AttackRouting {
   structures: StructureRegistry;
   /** Все квадранты сетки — запасной источник координаты, пока Журнал пуст. */
   allQuadrants: Quadrant[];
-  now(): number;
 }
 
 export class Faction extends WorldEntity {
@@ -43,7 +42,7 @@ export class Faction extends WorldEntity {
    * записей Журнала. Насилие стягивается туда, где уже что-то происходило.
    */
   protected override resolvePlace(): Quadrant {
-    const from = Math.max(0, this.routing.now() - this.cfg.recentWindowMinutes);
+    const from = Math.max(0, this.ctx.now() - this.cfg.recentWindowMinutes);
     const recent = this.ctx.journal.recentPlaces(from);
     const pool = recent.length > 0 ? recent : this.routing.allQuadrants;
     return this.ctx.rng.pick(pool);

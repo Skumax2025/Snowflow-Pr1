@@ -28,6 +28,7 @@ function makeCity() {
     journal,
     rng: createRng(1),
     external: { stormAt: () => 0, tension: () => 0 },
+    now: () => 0,
     emit: (event, payload) => bus.emit(event, payload),
   };
   const city = new City(cfg.city, ctx, cfg.party.cityQuadrant, bus);

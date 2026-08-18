@@ -59,6 +59,7 @@ function makeEther(seed = 5) {
     journal,
     rng: createRng(seed),
     external: { stormAt: () => 0, tension: () => 0 },
+    now: () => 0,
     emit: () => {},
   };
   // Одна захардкоженная живая структура-приёмник в том же квадранте.
