@@ -29,6 +29,22 @@ interface ProcessedClaim {
   factId: FactId | null;
 }
 
+/** Выпуск, который не влезает на страницу, игрок не читает вовсе. */
+function trim(lines: string[], limit: number, unit: string): string[] {
+  if (lines.length <= limit) return lines;
+  const rest = lines.length - limit;
+  const tail = `…и ещё ${rest} ${plural(rest, unit)} — подробности в эфире.`;
+  return [...lines.slice(0, limit), tail];
+}
+
+function plural(count: number, unit: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return unit;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${unit}а`;
+  return `${unit}й`;
+}
+
 export class Newspaper implements Tickable {
   readonly systemId = "газета";
 
@@ -104,11 +120,21 @@ export class Newspaper implements Tickable {
       digest.push(template.replace("{квадрант}", record.place));
     }
 
+    const trimmedVerdicts = trim(verdicts, this.cfg.maxVerdictLines, "доклад");
+    const trimmedDigest = trim(digest, this.cfg.maxDigestLines, "сообщение");
+
     const watchTimer = this.rng.chance(this.cfg.watchTimerChance)
       ? this.rng.pick(this.cfg.watchTimerFlavor)
       : null;
 
-    return { day: now.day, atMinute: now.totalMinutes, farewell: false, verdicts, digest, watchTimer };
+    return {
+      day: now.day,
+      atMinute: now.totalMinutes,
+      farewell: false,
+      verdicts: trimmedVerdicts,
+      digest: trimmedDigest,
+      watchTimer,
+    };
   }
 
   private humanEvent(eventType: string): string {

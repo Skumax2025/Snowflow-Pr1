@@ -59,6 +59,12 @@ export interface PoolEventRow {
 export interface PoolTable {
   /** Интервал тика в минутах; не меньше шага лупа. */
   tickMinutes: number;
+  /**
+   * Через сколько минут после старта партии сущность тикает впервые.
+   * По умолчанию — через полный интервал, из-за чего при редких тиках эфир
+   * молчал первые часы вахты. Мир идёт до прихода радиста, не с его приходом.
+   */
+  firstTickMinutes?: number;
   /** Вес опции «ничего не произошло». */
   idleWeight: number;
   events: PoolEventRow[];
@@ -286,8 +292,21 @@ export interface HallucinationsConfig {
   voiceFormat: "текст" | "звук" | "текст+действие";
 }
 
+export interface UiConfig {
+  /** Сколько игровых минут проходит за один тик реального тикера. */
+  gameMinutesPerTick: number;
+  /** Период реального тикера, миллисекунды. */
+  tickMs: number;
+  /** Доступные множители скорости; 0 — пауза. */
+  speeds: number[];
+  startPaused: boolean;
+}
+
 export interface NewspaperConfig {
   hour: number;
+  /** Сколько строк вердиктов и дайджеста показывать; остальное сворачивается. */
+  maxVerdictLines: number;
+  maxDigestLines: number;
   watchTimerChance: number;
   watchTimerFlavor: string[];
   verdictTemplates: Record<string, string>;
@@ -392,6 +411,7 @@ export interface SnowflowConfig {
   ending: EndingConfig;
   anomalyFilter: AnomalyFilterConfig;
   proxy: ProxyConfig;
+  ui: UiConfig;
   sim: SimConfig;
 }
 

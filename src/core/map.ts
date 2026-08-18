@@ -78,6 +78,19 @@ export class GameMap {
     this.posts.add(quadrant);
   }
 
+  /**
+   * Стереть всё, что игрок отметил в квадранте.
+   *
+   * Накопительность метки шторма — про то, что система не подчищает историю
+   * сама, а не про то, что игрок не вправе исправить свою же ошибку. Стирание
+   * остаётся осознанным действием и никогда не происходит автоматически.
+   */
+  clearQuadrant(quadrant: Quadrant): void {
+    this.storm.delete(quadrant);
+    this.relay.delete(quadrant);
+    this.posts.delete(quadrant);
+  }
+
   stormHistory(quadrant: Quadrant): readonly StormMark[] {
     return this.storm.get(quadrant) ?? [];
   }

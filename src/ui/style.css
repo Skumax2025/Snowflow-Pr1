@@ -64,6 +64,34 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.выбрано {
+  background: var(--ровно);
+  border-color: var(--ровно);
+  color: #08131b;
+}
+
+.часы {
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.крупно {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.хорошо {
+  color: #6fae7f;
+}
+
+.плохо {
+  color: var(--тревога);
+}
+
+input[type="number"] {
+  max-width: 90px;
+}
+
 input,
 textarea,
 select {

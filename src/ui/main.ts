@@ -2,8 +2,8 @@
  * UI Snowflow.
  *
  * Ни одной строки игровой логики: интерфейс только читает состояние ядра
- * и отправляет команды. Собственных игровых данных не хранит — вся его
- * память это позиция тюнера в поле ввода и выбранный сигнал.
+ * и отправляет команды. Собственных игровых данных не хранит — его память
+ * это выбранный сигнал, режим метки и состояние часов.
  *
  * Визуальный уровень намеренно минимальный: заливки цветом и текстовые
  * подписи, без спрайтов, анимаций и шрифтовых изысков.
@@ -18,14 +18,27 @@ const cfg = loadConfig();
 const game: Game = createGame(cfg);
 void game.anomalyFilter.loadCache();
 
+interface HealthReport {
+  keyPresent: boolean;
+  keyHint: string | null;
+  model: string;
+  reachable: boolean;
+  status: number | null;
+  detail: string;
+  latencyMs: number | null;
+}
+
 /** Единственное состояние интерфейса: что выбрано на экране. */
 const ui = {
   disclaimerAcknowledged: false,
   selectedSignal: null as SignalId | null,
-  lastAttempt: "" as string,
-  markMode: "шторм" as "шторм" | "чисто" | "активен" | "мёртв" | "пост",
+  lastAttempt: "",
+  markMode: "шторм" as "шторм" | "чисто" | "активен" | "мёртв" | "пост" | "стереть",
   wakeHour: 7,
   details: null as RevealedDetails | null,
+  speed: cfg.ui.startPaused ? 0 : 1,
+  health: null as HealthReport | null,
+  healthPending: false,
 };
 
 const app = document.getElementById("app") as HTMLElement;
@@ -74,13 +87,67 @@ function button(label: string, onClick: () => void, disabled = false): HTMLButto
   return b;
 }
 
+/** Кнопка-переключатель: выбранная подсвечивается, а не гасится. */
+function toggle(label: string, onClick: () => void, active: boolean): HTMLButtonElement {
+  const b = button(label, onClick);
+  if (active) b.classList.add("выбрано");
+  return b;
+}
+
+// ── Часы реального времени ────────────────────────────────────────────────
+//
+// Ядро headless и само себя не тикает: часы живут здесь и шлют ровно то же
+// «потратить N минут», которое шлют действия игрока. Пауза нужна, чтобы
+// читать газету и переносить сводку на карту, не теряя вахту.
+
+let clockTimer: number | null = null;
+
+function applySpeed(): void {
+  if (clockTimer !== null) {
+    window.clearInterval(clockTimer);
+    clockTimer = null;
+  }
+  if (ui.speed <= 0) return;
+
+  clockTimer = window.setInterval(() => {
+    if (!game.loop.isRunning) {
+      applyPause();
+      render();
+      return;
+    }
+    game.loop.advance(cfg.ui.gameMinutesPerTick * ui.speed);
+    render();
+  }, cfg.ui.tickMs);
+}
+
+function applyPause(): void {
+  ui.speed = 0;
+  if (clockTimer !== null) {
+    window.clearInterval(clockTimer);
+    clockTimer = null;
+  }
+}
+
 // ── Панели ────────────────────────────────────────────────────────────────
 
 function panelTime(): HTMLElement {
   const now = game.time.moment;
+  const speedButtons = cfg.ui.speeds.map((speed) =>
+    toggle(speed === 0 ? "пауза" : `×${speed}`, () => {
+      ui.speed = speed;
+      applySpeed();
+    }, ui.speed === speed),
+  );
+
   return panel("Вахта", [
     el("div", {
-      textContent: `День ${now.day}, ${hhmm(now.totalMinutes)}, ${now.isNight ? "ночь" : "день"}`,
+      className: "часы",
+      textContent: `День ${now.day} · ${hhmm(now.totalMinutes)} · ${now.isNight ? "ночь" : "день"}`,
+    }),
+    el("div", { className: "строка" }, speedButtons),
+    el("div", {
+      className: "тусклый",
+      textContent: ui.speed === 0 ? "время остановлено" : `${cfg.ui.gameMinutesPerTick * ui.speed} игровых минут за ${cfg.ui.tickMs} мс`,
     }),
     el("div", {
       className: "тусклый",
@@ -105,16 +172,25 @@ function panelRadioman(): HTMLElement {
 
 function panelGenerator(): HTMLElement {
   const level = game.generator.heatingLevel;
-  const slider = el("input", { type: "range", min: "0", max: String(cfg.generator.heatingMax), value: String(level) });
+  const slider = el("input", {
+    id: "обогрев",
+    type: "range",
+    min: "0",
+    max: String(cfg.generator.heatingMax),
+    value: String(level),
+  });
   slider.addEventListener("input", () => {
     game.generator.setHeating(Number(slider.value));
-    render();
+    refreshLabel("обогрев-подпись", `Обогрев ${game.generator.heatingLevel}`);
+    refreshLabel("баланс-подпись", `баланс тепла ${game.generator.heatBalance().toFixed(3)}/мин`);
   });
+
   return panel("Генератор", [
     bar("Топливо", game.generator.fuelLeft, cfg.party.startingFuel, "var(--тепло)"),
     el("div", { className: "строка" }, [
-      el("span", { textContent: `Обогрев ${level}` }),
+      el("span", { id: "обогрев-подпись", textContent: `Обогрев ${level}` }),
       el("span", {
+        id: "баланс-подпись",
         className: "тусклый",
         textContent: `баланс тепла ${game.generator.heatBalance().toFixed(3)}/мин`,
       }),
@@ -127,29 +203,68 @@ function panelGenerator(): HTMLElement {
   ]);
 }
 
+/** Точечное обновление подписи — чтобы не перерисовывать панель под курсором. */
+function refreshLabel(id: string, text: string): void {
+  const node = document.getElementById(id);
+  if (node) node.textContent = text;
+}
+
 function panelReception(): HTMLElement {
+  const maxFrequency = cfg.party.bands.reduce((acc, b) => Math.max(acc, b.to), 0);
+
   const tuner = el("input", {
+    id: "тюнер",
     type: "range",
     min: "0",
-    max: String(cfg.party.bands.reduce((acc, b) => Math.max(acc, b.to), 0)),
+    max: String(maxFrequency),
+    step: "1",
     value: String(game.reception.tunerPosition),
   });
-  tuner.addEventListener("input", () => {
-    game.reception.setTuner(Number(tuner.value));
-    render();
+  const exact = el("input", {
+    id: "частота",
+    type: "number",
+    min: "0",
+    max: String(maxFrequency),
+    step: "1",
+    value: String(game.reception.tunerPosition),
   });
 
+  const syncTuner = (value: number) => {
+    game.reception.setTuner(value);
+    const position = game.reception.tunerPosition;
+    tuner.value = String(position);
+    exact.value = String(position);
+    refreshLabel("диапазон-подпись", `${position} · ${game.reception.bandAt(position) ?? "вне диапазонов"}`);
+  };
+
+  tuner.addEventListener("input", () => syncTuner(Number(tuner.value)));
+  exact.addEventListener("input", () => syncTuner(Number(exact.value)));
+
+  const step = (delta: number) =>
+    button(delta > 0 ? `+${delta}` : String(delta), () => game.reception.setTuner(game.reception.tunerPosition + delta));
+
+  const jump = (label: string, frequency: number) =>
+    button(label, () => game.reception.setTuner(frequency));
+
   const position = game.reception.tunerPosition;
-  const band = game.reception.bandAt(position) ?? "вне диапазонов";
 
   return panel("Радиостанция", [
-    el("div", { className: "строка" }, [
-      el("span", { textContent: `Частота ${position}` }),
-      el("span", { className: "тусклый", textContent: band }),
-    ]),
+    el("div", {
+      id: "диапазон-подпись",
+      className: "крупно",
+      textContent: `${position} · ${game.reception.bandAt(position) ?? "вне диапазонов"}`,
+    }),
     tuner,
+    el("div", { className: "строка" }, [exact, step(-20), step(-5), step(5), step(20)]),
+    el("div", {}, [
+      jump("метео", cfg.party.meteoFrequency),
+      jump("ретрансляторы", cfg.party.relayFrequency),
+      ...cfg.party.bands.map((b) => jump(b.band, b.from + Math.floor((b.to - b.from) / 2))),
+    ]),
     button(
-      `Попытка настройки (${cfg.reception.attemptMinutes} мин)`,
+      cfg.reception.attemptMinutes > 0
+        ? `Слушать здесь (${cfg.reception.attemptMinutes} мин)`
+        : "Слушать здесь",
       () => {
         const result = game.reception.attempt();
         ui.lastAttempt =
@@ -165,7 +280,7 @@ function panelReception(): HTMLElement {
     el("div", { className: "тусклый", textContent: ui.lastAttempt }),
     el("div", {
       className: "тусклый",
-      textContent: `известные частоты: метео ${cfg.party.meteoFrequency}, ретрансляторы ${cfg.party.relayFrequency}`,
+      textContent: `окно приёма ±${cfg.reception.windowWidth} · в эфире сейчас ${game.broadcast.liveSignals().length}`,
     }),
   ]);
 }
@@ -206,20 +321,33 @@ function panelCheck(): HTMLElement {
 }
 
 function panelTerminal(): HTMLElement {
-  const area = el("textarea", { value: game.terminal.text, placeholder: "текст рапорта" });
+  const area = el("textarea", {
+    id: "рапорт",
+    value: game.terminal.text,
+    placeholder: "текст рапорта",
+  });
+  // Полная перерисовка на каждый символ убивала фокус и делала ввод
+  // невозможным: здесь обновляется только модель и подпись стоимости.
   area.addEventListener("input", () => {
     game.terminal.setDraft(area.value);
-    render();
+    const cost = game.terminal.currentCost;
+    refreshLabel("стоимость-рапорта", `отправка: ${cost.minutes.toFixed(1)} мин, ${cost.fuel.toFixed(1)} топлива`);
+    const send = document.getElementById("отправить") as HTMLButtonElement | null;
+    if (send) send.disabled = !game.terminal.canSend || game.ending.isOver;
   });
+
   const cost = game.terminal.currentCost;
+  const send = button("Отправить", () => game.terminal.send(), !game.terminal.canSend || game.ending.isOver);
+  send.id = "отправить";
 
   return panel("Терминал", [
     area,
     el("div", {
+      id: "стоимость-рапорта",
       className: "тусклый",
       textContent: `отправка: ${cost.minutes.toFixed(1)} мин, ${cost.fuel.toFixed(1)} топлива`,
     }),
-    button("Отправить", () => game.terminal.send(), !game.terminal.canSend || game.ending.isOver),
+    send,
   ]);
 }
 
@@ -241,9 +369,14 @@ function panelMap(): HTMLElement {
       const label = `${quadrant}${relay === "активен" ? " Р" : relay === "мёртв" ? " ×" : ""}${
         game.map.hasPost(quadrant) ? " п" : ""
       }`;
-      const cell = el("div", { className: classes.join(" "), textContent: label });
+      const cell = el("div", {
+        className: classes.join(" "),
+        textContent: label,
+        title: history.length > 0 ? history.map((h) => `${hhmm(h.observedAt)} ${h.status}`).join("\n") : "",
+      });
       cell.addEventListener("click", () => {
-        if (ui.markMode === "шторм" || ui.markMode === "чисто") game.map.markStorm(quadrant, ui.markMode);
+        if (ui.markMode === "стереть") game.map.clearQuadrant(quadrant);
+        else if (ui.markMode === "шторм" || ui.markMode === "чисто") game.map.markStorm(quadrant, ui.markMode);
         else if (ui.markMode === "пост") game.map.markPost(quadrant);
         else game.map.markRelay(quadrant, ui.markMode);
         render();
@@ -252,17 +385,17 @@ function panelMap(): HTMLElement {
     }
   }
 
-  const modes = (["шторм", "чисто", "активен", "мёртв", "пост"] as const).map((mode) =>
-    button(ui.markMode === mode ? `[${mode}]` : mode, () => {
+  const modes = (["шторм", "чисто", "активен", "мёртв", "пост", "стереть"] as const).map((mode) =>
+    toggle(mode, () => {
       ui.markMode = mode;
-    }),
+    }, ui.markMode === mode),
   );
 
   const meteo = game.map.digest("метео");
   const relays = game.map.digest("ретрансляторы");
 
   return panel("Карта", [
-    el("div", { className: "тусклый", textContent: "тип метки, затем клик по квадранту" }),
+    el("div", { className: "тусклый", textContent: "выбери тип метки, затем кликай по квадрантам" }),
     ...modes,
     grid,
     el("div", { className: "тусклый", textContent: "последние пойманные сводки:" }),
@@ -297,9 +430,7 @@ function panelNewspaper(): HTMLElement {
       ...issue.verdicts.map((line) => el("li", { textContent: line })),
       ...issue.digest.map((line) => el("li", { className: "тусклый", textContent: line })),
     ]),
-    issue.watchTimer
-      ? el("div", { className: "тусклый", textContent: issue.watchTimer })
-      : el("div"),
+    issue.watchTimer ? el("div", { className: "тусклый", textContent: issue.watchTimer }) : el("div"),
   ]);
 }
 
@@ -314,11 +445,7 @@ function panelBridge(): HTMLElement {
         sight.sky.storm ? "над вышкой метёт" : "над вышкой чисто"
       }, ${sight.sky.isNight ? "темно" : "светло"}`,
     }),
-    button(
-      `Остаться (${cfg.bridge.stayMinutes} мин)`,
-      () => game.bridge.stay(),
-      game.ending.isOver,
-    ),
+    button(`Остаться (${cfg.bridge.stayMinutes} мин)`, () => game.bridge.stay(), game.ending.isOver),
     button("Уйти с мостика", () => game.bridge.leave()),
     el("div", {
       className: "тусклый",
@@ -330,7 +457,7 @@ function panelBridge(): HTMLElement {
 }
 
 function panelRest(): HTMLElement {
-  const select = el("select");
+  const select = el("select", { id: "час-пробуждения" });
   for (let hour = 0; hour < 24; hour++) {
     const option = el("option", { value: String(hour), textContent: `${String(hour).padStart(2, "0")}:00` });
     if (hour === ui.wakeHour) option.selected = true;
@@ -358,15 +485,8 @@ function panelRest(): HTMLElement {
     }),
     el("hr"),
     el("div", { textContent: `Порций еды: ${game.meal.count}` }),
-    button(
-      `Поесть (${cfg.meal.minutes} мин)`,
-      () => game.meal.eat(),
-      !game.meal.available || game.ending.isOver,
-    ),
-    el("div", {
-      className: "тусклый",
-      textContent: game.meal.available ? "" : "нечего есть",
-    }),
+    button(`Поесть (${cfg.meal.minutes} мин)`, () => game.meal.eat(), !game.meal.available || game.ending.isOver),
+    el("div", { className: "тусклый", textContent: game.meal.available ? "" : "нечего есть" }),
   ]);
 }
 
@@ -378,11 +498,82 @@ function panelVoices(): HTMLElement {
       : el(
           "ul",
           { className: "лог" },
-          voices
-            .slice(-8)
-            .map((v) => el("li", { textContent: `${hhmm(v.atMinute)} — ${v.text}` })),
+          voices.slice(-8).map((v) => el("li", { textContent: `${hhmm(v.atMinute)} — ${v.text}` })),
         ),
   ]);
+}
+
+/** Диагностика: доедет ли рапорт до модели или партия идёт в деградации. */
+function panelHealth(): HTMLElement {
+  const report = ui.health;
+  const lines: Array<Node | string> = [];
+
+  if (ui.healthPending) {
+    lines.push(el("div", { className: "тусклый", textContent: "проверяю…" }));
+  } else if (!report) {
+    lines.push(
+      el("div", {
+        className: "тусклый",
+        textContent: "статус связи неизвестен. Без связи игра работает: разбор рапорта уходит в деградированный режим.",
+      }),
+    );
+  } else {
+    lines.push(
+      el("div", {
+        className: report.reachable ? "хорошо" : "плохо",
+        textContent: report.reachable ? "связь есть" : "связи нет",
+      }),
+      el("div", { className: "тусклый", textContent: report.detail }),
+      el("div", {
+        className: "тусклый",
+        textContent:
+          `модель ${report.model} · ключ ${report.keyPresent ? (report.keyHint ?? "задан") : "не задан"}` +
+          (report.status !== null ? ` · ответ ${report.status}` : "") +
+          (report.latencyMs !== null ? ` · ${report.latencyMs} мс` : ""),
+      }),
+    );
+  }
+
+  return panel("Связь с Gemini", [
+    ...lines,
+    button("Проверить связь", () => {
+      ui.healthPending = true;
+      void fetch("/api/health")
+        .then((r) => r.json() as Promise<HealthReport>)
+        .then((data) => {
+          ui.health = data;
+        })
+        .catch(() => {
+          ui.health = {
+            keyPresent: false,
+            keyHint: null,
+            model: cfg.proxy.model,
+            reachable: false,
+            status: null,
+            detail: "Эндпоинт /api/health недоступен. В режиме npm run dev он поднимается плагином, на Vercel — платформой.",
+            latencyMs: null,
+          };
+        })
+        .finally(() => {
+          ui.healthPending = false;
+          render();
+        });
+    }, ui.healthPending),
+  ]);
+}
+
+function panelDisclaimer(): HTMLElement | null {
+  if (!disclaimerText || ui.disclaimerAcknowledged) return null;
+  return panel(
+    "Прежде чем открыть поле рапорта",
+    [
+      el("div", { textContent: disclaimerText }),
+      button("Понятно", () => {
+        ui.disclaimerAcknowledged = true;
+      }),
+    ],
+    "финал",
+  );
 }
 
 function panelEnding(): HTMLElement | null {
@@ -410,21 +601,16 @@ function panelEnding(): HTMLElement | null {
 
 // ── Отрисовка ─────────────────────────────────────────────────────────────
 
-function panelDisclaimer(): HTMLElement | null {
-  if (!disclaimerText || ui.disclaimerAcknowledged) return null;
-  return panel(
-    "Прежде чем открыть поле рапорта",
-    [
-      el("div", { textContent: disclaimerText }),
-      button("Понятно", () => {
-        ui.disclaimerAcknowledged = true;
-      }),
-    ],
-    "финал",
-  );
-}
-
 function render(): void {
+  // Часы перерисовывают экран дважды в секунду, а игрок в это время печатает
+  // рапорт или ведёт ползунок. Фокус и каретку приходится восстанавливать
+  // руками: иначе ввод физически невозможен.
+  const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+  const activeId = active?.id || null;
+  const selectionStart = active?.selectionStart ?? null;
+  const selectionEnd = active?.selectionEnd ?? null;
+  const scroll = window.scrollY;
+
   app.replaceChildren();
   const disclaimer = panelDisclaimer();
   if (disclaimer) app.append(disclaimer);
@@ -443,7 +629,23 @@ function render(): void {
     panelBridge(),
     panelRest(),
     panelVoices(),
+    panelHealth(),
   );
+
+  if (activeId) {
+    const restored = document.getElementById(activeId) as HTMLInputElement | null;
+    if (restored) {
+      restored.focus();
+      if (selectionStart !== null && typeof restored.setSelectionRange === "function") {
+        try {
+          restored.setSelectionRange(selectionStart, selectionEnd ?? selectionStart);
+        } catch {
+          // Числовые поля селекцию не поддерживают — не беда.
+        }
+      }
+    }
+  }
+  window.scrollTo(0, scroll);
 }
 
 // Дисклеймер показывается один раз за партию, перед первым открытием поля
@@ -454,3 +656,4 @@ const disclaimerText = game.terminal.openInput();
 game.bus.on("выпуск_готов", () => render());
 
 render();
+applySpeed();

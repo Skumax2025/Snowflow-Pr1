@@ -65,8 +65,9 @@ export const defaultConfig: SnowflowConfig = {
       supply: 50,
     },
     pool: {
-      tickMinutes: 60,
-      idleWeight: 20,
+      tickMinutes: 180,
+      firstTickMinutes: 20,
+      idleWeight: 110,
       events: [
         {
           id: "спокойный_период",
@@ -119,10 +120,10 @@ export const defaultConfig: SnowflowConfig = {
         },
       ],
     },
-    defenceRate: { coefPanic: 0.0006, coefIntegrity: 0.0004, cap: 100 },
+    defenceRate: { coefPanic: 0.0001, coefIntegrity: 0.00005, cap: 100 },
     destruction: { weightIntegrity: 0.6, weightPopulation: 0.4 },
     supplyVolume: { coefSupply: 1.6, coefTrust: 1.2, floor: 120 },
-    breach: { populationLossPercent: 0.2, integrityLoss: 4, defenceLossFactor: 0.5 },
+    breach: { populationLossPercent: 0.6, integrityLoss: 8, defenceLossFactor: 0.5 },
     supplyEvent: { delivered: 6, lost: -8, lostPanic: 5 },
     verdict: {
       trustTruth: 6,
@@ -139,8 +140,9 @@ export const defaultConfig: SnowflowConfig = {
   structures: {
     pools: {
       склад: {
-        tickMinutes: 120,
-        idleWeight: 6,
+        tickMinutes: 240,
+        firstTickMinutes: 20,
+        idleWeight: 130,
         events: [
           {
             id: "родить_конвой",
@@ -159,8 +161,9 @@ export const defaultConfig: SnowflowConfig = {
         ],
       },
       база: {
-        tickMinutes: 90,
-        idleWeight: 6,
+        tickMinutes: 240,
+        firstTickMinutes: 20,
+        idleWeight: 90,
         events: [
           {
             id: "военная_сводка",
@@ -176,8 +179,9 @@ export const defaultConfig: SnowflowConfig = {
         ],
       },
       пост: {
-        tickMinutes: 90,
-        idleWeight: 8,
+        tickMinutes: 240,
+        firstTickMinutes: 20,
+        idleWeight: 110,
         events: [
           { id: "болтовня", baseWeight: 4, fact: { eventType: "болтовня", status: "в_эфире" } },
           { id: "сплетни", baseWeight: 3, fact: { eventType: "сплетни", status: "в_эфире" } },
@@ -187,18 +191,19 @@ export const defaultConfig: SnowflowConfig = {
       ретранслятор: {
         // Ретранслятор собственных фактов не генерирует (заметка «Структуры», п.6).
         tickMinutes: 180,
+        firstTickMinutes: 20,
         idleWeight: 1,
         events: [],
       },
     },
     convoyPool: {
-      tickMinutes: 30,
+      tickMinutes: 180,
       idleWeight: 2,
       events: [
         {
           id: "шаг_по_маршруту",
           baseWeight: 10,
-          effectOnSelf: [{ stat: "progress", delta: 20 }],
+          effectOnSelf: [{ stat: "progress", delta: 35 }],
           fact: { eventType: "конвой_в_пути", status: "в_пути" },
         },
         {
@@ -236,8 +241,9 @@ export const defaultConfig: SnowflowConfig = {
     recentWindowMinutes: 720,
     pools: {
       свои: {
-        tickMinutes: 60,
-        idleWeight: 6,
+        tickMinutes: 240,
+        firstTickMinutes: 20,
+        idleWeight: 90,
         events: [
           { id: "координаты_квадрата", baseWeight: 3, fact: { eventType: "координаты_квадрата", status: "переданы" } },
           { id: "шифровка", baseWeight: 3, fact: { eventType: "шифровка", status: "в_эфире" } },
@@ -245,8 +251,9 @@ export const defaultConfig: SnowflowConfig = {
         ],
       },
       противники: {
-        tickMinutes: 60,
-        idleWeight: 8,
+        tickMinutes: 180,
+        firstTickMinutes: 20,
+        idleWeight: 32,
         events: [
           {
             id: "атака_силой_N",
@@ -255,7 +262,7 @@ export const defaultConfig: SnowflowConfig = {
             externalModifiers: [{ source: "напряжённость", coef: 0.08 }],
             fact: { eventType: "атака", status: "нанесена", archetypeTag: "агрессивное" },
             outbound: { event: "атака_силой_N", to: "маршрутизация_атаки" },
-            attackPower: [10, 45],
+            attackPower: [30, 85],
           },
           {
             id: "перехват_переговоров",
@@ -265,8 +272,9 @@ export const defaultConfig: SnowflowConfig = {
         ],
       },
       мародёры: {
-        tickMinutes: 60,
-        idleWeight: 6,
+        tickMinutes: 240,
+        firstTickMinutes: 20,
+        idleWeight: 90,
         events: [
           { id: "ложный_сигнал_бедствия", baseWeight: 4, fact: { eventType: "сигнал_бедствия", status: "передан" } },
           {
@@ -288,14 +296,14 @@ export const defaultConfig: SnowflowConfig = {
     coefFromTrustDrop: 1.0,
     dischargeAmount: 20,
     branches: { supplyLost: 30, disinformation: 50, emergencyRaid: 70 },
-    raidPower: [45, 75],
+    raidPower: [60, 95],
     aggressiveWeightCoef: 0.08,
   },
 
   // ── Генератор эфира ──────────────────────────────────────────────────────
   broadcast: {
     tickMinutes: 15,
-    ttlMinutes: 240,
+    ttlMinutes: 420,
     hearingRadius: { ретранслятор: 3, пост: 2, база: 2 },
     audibility: {
       "структура:пост": "посты",
@@ -361,8 +369,13 @@ export const defaultConfig: SnowflowConfig = {
 
   // ── Приём сигнала ────────────────────────────────────────────────────────
   reception: {
-    windowWidth: 3,
-    attemptMinutes: 10,
+    // Окно шире: попытка стала бесплатной, и при узком окне слепой поиск
+    // вырождался в десятки кликов подряд. Полное прочёсывание шкалы —
+    // порядка пятнадцати позиций.
+    windowWidth: 10,
+    // Попытка настройки бесплатна: время идёт само, и платить ещё и минутами
+    // за поворот ручки — решение автора, отменённое на плейтесте.
+    attemptMinutes: 0,
     tunerStart: 150,
   },
 
@@ -430,6 +443,8 @@ export const defaultConfig: SnowflowConfig = {
   // ── Газета ───────────────────────────────────────────────────────────────
   newspaper: {
     hour: 7,
+    maxVerdictLines: 6,
+    maxDigestLines: 8,
     watchTimerChance: 0.5,
     watchTimerFlavor: [
       "Эвакуацию снова перенесли. Ждите распоряжений.",
@@ -571,6 +586,16 @@ export const defaultConfig: SnowflowConfig = {
       timeToleranceMinutes: 180,
       confidenceThreshold: 0.6,
     },
+  },
+
+  // ── Интерфейс ────────────────────────────────────────────────────────────
+  ui: {
+    // 6 игровых минут в реальную секунду: сутки укладываются в 4 реальные
+    // минуты, партия в 13 дней — примерно в 52, ровно вилка ГДД 45–60.
+    gameMinutesPerTick: 3,
+    tickMs: 500,
+    speeds: [0, 1, 2, 4],
+    startPaused: false,
   },
 
   // ── Стенд симуляции ──────────────────────────────────────────────────────

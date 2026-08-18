@@ -66,7 +66,10 @@ export class WorldEntity implements Tickable {
     startOffset = 0,
   ) {
     this.systemId = subject;
-    this.schedule = new Schedule(table.tickMinutes, startOffset + table.tickMinutes);
+    this.schedule = new Schedule(
+      table.tickMinutes,
+      startOffset + (table.firstTickMinutes ?? table.tickMinutes),
+    );
   }
 
   tick(now: Moment): void {
